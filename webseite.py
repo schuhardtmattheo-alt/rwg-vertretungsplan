@@ -94,6 +94,8 @@ def baue_webseite(d: dict) -> str:
   .stand {{ color: var(--muted); font-size: 14px; }}
   .warnung {{ display: none; margin: 14px 0 0; padding: 12px 14px; border-radius: 10px;
              background: var(--aus-bg); color: var(--aus-text); border: 1px solid var(--aus-line); font-weight: 600; }}
+  .vorschau {{ display: none; margin: 12px 0 0; padding: 10px 14px; border-radius: 10px; font-weight: 600;
+              background: var(--card); border: 1px solid var(--line); }}
   .summe {{ display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }}
   .chip {{ background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 15px; }}
   .chip b {{ font-size: 17px; }}
@@ -132,7 +134,8 @@ def baue_webseite(d: dict) -> str:
   <div class="klasse">Vertretungsplan · Klasse {_e(d.get("klasse"))}</div>
   <h1>{_e(d.get("datum_text"))}</h1>
   <div class="stand">Abgerufen: {_e(d.get("abgerufen"))} Uhr · Stand Schule: {_e(str(d.get("aktualisiert") or "").replace("aktualisiert", "").strip())}</div>
-  <div class="warnung" id="warnung">⚠️ Achtung: Dieser Plan ist nicht von heute. Tippe auf „Aktualisieren“.</div>
+  <div class="vorschau" id="vorschau">📅 Plan für den nächsten Schultag</div>
+  <div class="warnung" id="warnung">⚠️ Achtung: Dieser Plan ist veraltet. Tippe auf „Aktualisieren“.</div>
   <button class="knopf" id="knopf" type="button">↻ Aktualisieren</button>
   <div class="knopf-info" id="knopfInfo"></div>
 
@@ -145,14 +148,18 @@ def baue_webseite(d: dict) -> str:
   {liste}
   {extra}
 
-  <footer>Wird an Schultagen automatisch alle 30 Minuten aktualisiert – oder sofort mit dem Knopf oben.</footer>
+  <footer>Automatisch aktualisiert um 7:20, 7:30, 11:20, 15:30, 18:00 und 20:00 Uhr – oder sofort mit dem Knopf oben.<br>
+  Ab 15:30 Uhr wird der nächste Schultag angezeigt.</footer>
 </main>
 <script>
   (function () {{
     var planTag = "{_e(d.get("datum_iso"))}";
     var j = new Date();
     var heute = j.getFullYear() + "-" + String(j.getMonth() + 1).padStart(2, "0") + "-" + String(j.getDate()).padStart(2, "0");
-    if (planTag !== heute) document.getElementById("warnung").style.display = "block";
+    // Ab 15:30 Uhr und am Wochenende soll der nächste Schultag angezeigt werden
+    var naechsterErwartet = j.getDay() === 0 || j.getDay() === 6 || (j.getHours() * 60 + j.getMinutes()) >= 15 * 60 + 30;
+    if (planTag > heute) document.getElementById("vorschau").style.display = "block";
+    if (planTag < heute || (planTag === heute && naechsterErwartet)) document.getElementById("warnung").style.display = "block";
   }})();
 
   (function () {{

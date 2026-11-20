@@ -1,7 +1,7 @@
 # Vertretungsplan 9C – automatisch online
 
-**Was passiert:** GitHub (kostenlos) startet an Schultagen alle 30 Minuten einen kleinen
-Computer in der Cloud. Zusätzlich gibt es auf der Webseite einen Knopf **„Aktualisieren“**, der
+**Was passiert:** GitHub (kostenlos) startet um 7:20, 7:30, 11:20, 15:30, 18:00 und 20:00 Uhr einen kleinen
+Computer in der Cloud (ab 15:30 Uhr und am Wochenende wird der nächste Schultag angezeigt). Zusätzlich gibt es auf der Webseite einen Knopf **„Aktualisieren“**, der
 sofort einen Abruf startet (dauert ca. 1–2 Minuten). Der Cloud-Computer öffnet
 `rwg-waren.de/stundenplan/vplan/modern/`, meldet sich falls nötig bei Microsoft an, wählt **9C**,
 stellt auf **Heute**, liest den Plan aus und veröffentlicht ihn auf **Cloudflare Pages** (kostenlos).

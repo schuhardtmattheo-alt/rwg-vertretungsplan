@@ -183,6 +183,17 @@ def bewerte_stunde(s: dict) -> dict:
     return s
 
 
+UMSCHALTZEIT = (15, 30)  # ab dieser Uhrzeit wird der nächste Schultag angezeigt
+
+
+def soll_naechster_tag(jetzt: datetime) -> bool:
+    modus = os.environ.get("TAG_MODUS", "").lower()  # zum Testen: "heute" oder "naechster"
+    if modus in ("heute", "naechster"):
+        return modus == "naechster"
+    wochenende = jetzt.weekday() >= 5
+    return wochenende or (jetzt.hour, jetzt.minute) >= UMSCHALTZEIT
+
+
 def lese_plan(page, klasse: str) -> dict:
     # Cookie-Hinweis wegklicken, falls vorhanden
     if ist_sichtbar(page, "#acceptCookies"):
@@ -211,17 +222,41 @@ def lese_plan(page, klasse: str) -> dict:
     page.wait_for_function(warte_js, arg=[klasse, ""], timeout=30000)
 
     # Auf "Heute" stellen und warten, bis der heutige Plan fertig geladen ist
-    heute_iso = datetime.now(BERLIN).strftime("%Y-%m-%d")
+    jetzt = datetime.now(BERLIN)
+    heute_iso = jetzt.strftime("%Y-%m-%d")
     page.click("#todayButton")
     page.wait_for_timeout(500)
     page.wait_for_function(warte_js, arg=[klasse, heute_iso], timeout=30000)
+
+    # Ab 15:30 Uhr und am Wochenende: einen Schultag weiter ("Weiter" überspringt Wochenenden/Ferientage)
+    naechster = soll_naechster_tag(jetzt)
+    if naechster:
+        page.click("#nextDay")
+        page.wait_for_timeout(500)
+        page.wait_for_function(
+            """([kl, tag]) => {
+                const label = (document.querySelector('#selectedClassLabel')||{}).textContent || '';
+                const upd = (document.querySelector('#updatedAt')||{}).textContent || '';
+                const datum = (document.querySelector('#planDateInput')||{}).value || '';
+                const list = document.querySelector('#planList');
+                return label.toLowerCase().includes(kl.toLowerCase())
+                    && !/Lädt/i.test(upd) && datum > tag
+                    && list && list.children.length > 0;
+            }""",
+            arg=[klasse, heute_iso],
+            timeout=30000,
+        )
     page.wait_for_timeout(1500)  # kurz nachrendern lassen
 
     daten = page.evaluate(JS_AUSLESEN)
 
-    # Prüfen, dass wirklich heute eingestellt ist
-    if daten.get("datum_feld") and daten["datum_feld"] != heute_iso:
-        raise RuntimeError(f"Datum steht auf {daten['datum_feld']}, nicht auf heute ({heute_iso}).")
+    # Prüfen, dass das richtige Datum eingestellt ist
+    feld = daten.get("datum_feld")
+    if feld and not naechster and feld != heute_iso:
+        raise RuntimeError(f"Datum steht auf {feld}, nicht auf heute ({heute_iso}).")
+    if feld and naechster and feld <= heute_iso:
+        raise RuntimeError(f"Datum steht auf {feld}, sollte aber nach heute ({heute_iso}) liegen.")
+    daten["ist_naechster_tag"] = naechster
 
     daten["stunden"] = [bewerte_stunde(s) for s in daten["stunden"]]
     return daten
