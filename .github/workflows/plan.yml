@@ -1,0 +1,67 @@
+name: Vertretungsplan abrufen
+
+on:
+  schedule:
+    # Zeiten sind in UTC: Mo-Fr alle 30 Minuten von 04:00 bis 14:30 UTC
+    # = 05:00-15:30 Uhr im Winter bzw. 06:00-16:30 Uhr im Sommer (deutsche Zeit)
+    - cron: "*/30 4-14 * * 1-5"
+  workflow_dispatch: {}   # wird vom "Aktualisieren"-Knopf auf der Webseite ausgelöst
+
+concurrency:
+  group: plan
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write   # nur für den Keep-alive-Schritt unten
+
+jobs:
+  abrufen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Europe/Berlin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Abhängigkeiten installieren
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      # Hinweis: Das Repository ist öffentlich, also auch diese Logs.
+      # Deshalb werden hier keine Screenshots hochgeladen und keine Plandetails ausgegeben.
+      - name: Plan auslesen
+        env:
+          RWG_EMAIL: ${{ secrets.RWG_EMAIL }}
+          RWG_PASSWORT: ${{ secrets.RWG_PASSWORT }}
+          KLASSE: ${{ vars.KLASSE || '9c' }}
+        run: python scraper.py
+
+      - name: Auf Cloudflare Pages veröffentlichen
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          KNOPF_GITHUB_TOKEN: ${{ secrets.KNOPF_GITHUB_TOKEN }}
+          PROJEKT: ${{ vars.CF_PROJEKT || 'rwg-plan-9c' }}
+        run: |
+          npx --yes wrangler@4 pages project create "$PROJEKT" --production-branch=main >/dev/null 2>&1 || true
+          # Zugang für den "Aktualisieren"-Knopf (nur beim ersten Mal bzw. nach Änderung nötig, schadet aber nicht)
+          if [ -n "$KNOPF_GITHUB_TOKEN" ] && [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            printf '%s' "$KNOPF_GITHUB_TOKEN" | npx --yes wrangler@4 pages secret put GH_TOKEN --project-name="$PROJEKT" >/dev/null
+            printf '%s' "$GITHUB_REPOSITORY" | npx --yes wrangler@4 pages secret put GH_REPO --project-name="$PROJEKT" >/dev/null
+          fi
+          npx --yes wrangler@4 pages deploy public --project-name="$PROJEKT" --branch=main --commit-dirty=true
+
+      # GitHub schaltet Zeitpläne in öffentlichen Repos nach 60 Tagen ohne Änderungen ab.
+      # Dieser Schritt hält den Workflow aktiv.
+      - name: Keep-alive
+        if: always() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/plan.yml/enable" || true

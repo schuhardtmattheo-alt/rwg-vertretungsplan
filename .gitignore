@@ -1,0 +1,7 @@
+# NIEMALS hochladen: enthält Passwort und Tokens
+zugangsdaten.env
+*.env
+
+debug/
+public/
+__pycache__/
